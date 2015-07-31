@@ -1,7 +1,6 @@
 (function () {
     var name = "mokuso";
-<<<<<<< HEAD
-        
+
     //private functions
     var isArray = function (obj) {
         if (obj && $.isArray(obj)) {
@@ -28,9 +27,8 @@
             a = queryString.split('&');
         }
         var b = {};
-        for (var i = 0; i < a.length; ++i)
-        {
-            var p=a[i].split('=');
+        for (var i = 0; i < a.length; ++i) {
+            var p = a[i].split('=');
             if (p.length != 2) continue;
             b[p[0]] = decodeURIComponent(p[1].replace(/\+/g, " "));
         }
@@ -48,23 +46,13 @@
             kendoMobileApplication: null,
         }, options);
     };
-=======
-    var events = {};
-    var viewDataKey = name+"View";
->>>>>>> d9dc60156afda9d7a2616a7b6d116f2fa7c15c60
     var render = function (kendoView, node, args) {
         //call model's preinit
         kendoView.model.preinit(node, args);
         //nest inside parent Layout?
-<<<<<<< HEAD
         var parentLayout = node.parents("*[data-role='" + name + "view']:first").data(name + "View");
         if (parentLayout && parentLayout instanceof kendo.Layout) {
             parentLayout.showIn(kendoView, node);
-=======
-        var parentLayout = node.closest("*[data-" + viewDataKey + "]");
-        if (parentLayout.length) {
-            parentLayout.data(viewDataKey).showIn(kendoView, node);
->>>>>>> d9dc60156afda9d7a2616a7b6d116f2fa7c15c60
         }
         else {
             kendoView.render(node);
@@ -72,11 +60,7 @@
     };
     var getView = function (page) {
         return $.ajax({
-<<<<<<< HEAD
             url: require.toUrl("view/" + page + ".html")
-=======
-            url: require.toUrl("view/"+page+".html")
->>>>>>> d9dc60156afda9d7a2616a7b6d116f2fa7c15c60
         }).promise();
     };
     var go = function (_node, _page, _args) {
@@ -87,24 +71,15 @@
         var _def = $.Deferred();
         var qIdx = _page.indexOf("?");
         var page = qIdx > 0 ? _page.substring(0, qIdx) : _page;
-<<<<<<< HEAD
         var args = (isObservableObject(_args)) ? _args : (new kendo.data.ObservableObject($.isPlainObject(_args) ? _args : {}));
-=======
-        var args = (kendo.isObservableObject(_args)) ? _args : (new kendo.data.ObservableObject($.isPlainObject(_args) ? _args : {}));
->>>>>>> d9dc60156afda9d7a2616a7b6d116f2fa7c15c60
         var node = _node;
         //make sure its a jquery node..
         if (!(_node instanceof $)) {
             node = $(_node);
         }
         //destroy existing node first?
-<<<<<<< HEAD
         var inlineViews = node.find("*[data-role='" + name + "view']");
         if (node.data(name + "View")) {
-=======
-        var inlineViews = node.find("[data-attr-"+viewDataKey+"]");
-        if (node.data(viewDataKey)) {
->>>>>>> d9dc60156afda9d7a2616a7b6d116f2fa7c15c60
             //add target node, it itself is a view...
             inlineViews.push(node);
         }
@@ -115,38 +90,21 @@
             //sort inlineViews by depth, destroying the deepest first...
             var __def = $.map(inlineViews, function (node) {
                 var n = $(node);
-<<<<<<< HEAD
                 return { depth: n.parents().length, node: n };
             }).sort(function (a, b) {
                 return b.depth - a.depth;
             }).reduce(function (prev, curr, idx, arr) {
                 return prev.then(function () {
                     return curr.node.data(name + "View").model.deinit(curr.node);
-=======
-                return { depth: n.parents().length, node: n};
-            }).sort(function (a, b) {
-                return b.depth - a.depth;
-            }).reduce(function(prev, curr, idx, arr) {
-                return prev.then(function () {
-                    return curr.node.data(viewDataKey).model.deinit(curr.node);
->>>>>>> d9dc60156afda9d7a2616a7b6d116f2fa7c15c60
                 });
             }, ___def);
             //after they are all destroyed then resolve the main deferred
             __def.always(function () {
-<<<<<<< HEAD
                 node.data(name + "View").destroy();
                 node.empty();
             }).always(function () {
                 //trigger before route
                 events.trigger("before-route", [page, node]);
-=======
-                node.data(viewDataKey).destroy();
-                node.empty();
-            }).always(function () {
-                //trigger before route
-                $(events).trigger("before-route", [page, node]);
->>>>>>> d9dc60156afda9d7a2616a7b6d116f2fa7c15c60
                 //get view
                 return getView(page).always(function (view) {
                     def.resolveWith(null, [view]);
@@ -157,11 +115,7 @@
         }
         else {
             //trigger before route
-<<<<<<< HEAD
             events.trigger("before-route", [page, node]);
-=======
-            $(events).trigger("before-route", [page, node]);
->>>>>>> d9dc60156afda9d7a2616a7b6d116f2fa7c15c60
             //get view
             def = getView(page);
         }
@@ -169,58 +123,39 @@
         require(["viewmodel/" + page], function (modelview) {
             //wait for view
             def.then(function (view) {
-<<<<<<< HEAD
                 var kendoView = new kendo.View("<div>" + view + "</div>", {
-=======
-                var kendoView = new kendo.Layout("<div>" + view + "</div>", {
->>>>>>> d9dc60156afda9d7a2616a7b6d116f2fa7c15c60
                     model: kendo.observable($.extend(true, {
                         //before the view is rendered
                         preinit: function (node, args) { },
                         //after the view is rendered
                         init: function (node, args) { },
-<<<<<<< HEAD
                         //after the view is re-rendered into the same node (only for mobile)
                         reinit: function (node, args) { },
-=======
->>>>>>> d9dc60156afda9d7a2616a7b6d116f2fa7c15c60
                         //before the view is destroyed
                         deinit: function (node) { },
                     }, modelview)),
                     init: function () {
                         var self = this;
-<<<<<<< HEAD
                         var node = this.element.parent();
                         //make sure some attribs are set
                         node.attr("data-role", name + "view");
                         node.attr("data-view", page);
-=======
->>>>>>> d9dc60156afda9d7a2616a7b6d116f2fa7c15c60
                         //call init and wait...
                         $.when(this.model.init(this.element, args)).always(function () {
                             var _model = self.model;
                             var _element = self.element;
                             var _defs = [];
                             //now, process sub pages
-<<<<<<< HEAD
                             _element.find("*[data-role='" + name + "view']").each(function (i, n) {
                                 var _n = $(n);
                                 var _args = new kendo.data.ObservableObject({});
                                 //parse out any args
                                 if ($.trim(_n.attr("data-view-args")).length) {
-=======
-                            _element.find("*[data-page]").each(function (i, n) {
-                                var _n = $(n);
-                                var _args = new kendo.data.ObservableObject({});
-                                //parse out any args
-                                if ($.trim(_n.attr("data-page-args")).length) {
->>>>>>> d9dc60156afda9d7a2616a7b6d116f2fa7c15c60
                                     with (_model) {
                                         var arrBindFields = [];
                                         var __args = {};
                                         try {
                                             //is there any other way to do this?? not very performant at scale...
-<<<<<<< HEAD
                                             eval("__args = " + _n.attr("data-view-args"));
                                         }
                                         catch (ex) {
@@ -241,22 +176,6 @@
                                                         _args.set(fProp, _model.get(tProp));
                                                         break;
                                                     }
-=======
-                                            eval("__args = " + _n.attr("data-page-args"));
-                                        }
-                                        catch (ex) {
-                                            //eval didnt work most likely
-                                            console.error("Argument Parsing Error", "Could not parse inline page arguments: " + _n.attr("data-page-args"));
-                                        }
-                                        //get string representation of properties from and to for binding from and to ObservableObjects
-                                        for (var fProp in __args) {
-                                            for (var tProp in _model) {
-                                                if (__args[fProp] === _model[tProp]) {
-                                                    arrBindFields.push({ f: fProp, t: tProp });
-                                                    //set initial value
-                                                    _args.set(fProp, _model.get(tProp));
-                                                    break;
->>>>>>> d9dc60156afda9d7a2616a7b6d116f2fa7c15c60
                                                 }
                                             }
                                         }
@@ -275,11 +194,7 @@
                                     }
                                 }
                                 //load page in node...
-<<<<<<< HEAD
                                 _defs.push(go(_n, _n.attr("data-view"), _args));
-=======
-                                _defs.push(go(_n, _n.attr("data-page"), _args));
->>>>>>> d9dc60156afda9d7a2616a7b6d116f2fa7c15c60
                             });
                             //await nested pages then resolve go deferred
                             $.when.apply($, _defs).then(function () {
@@ -292,18 +207,10 @@
                     },
                     wrap: false,
                 });
-<<<<<<< HEAD
                 //set data and attribute(s)
                 node.data(name + "View", kendoView);
                 //render!
                 render(kendoView, node, args);
-=======
-                //render!
-                render(kendoView, node, args);
-                //set data and attribute
-                node.attr("data-attr-"+viewDataKey, true);
-                node.data(viewDataKey, kendoView);
->>>>>>> d9dc60156afda9d7a2616a7b6d116f2fa7c15c60
             }).fail(function () {
                 //fail go deferred
                 _def.rejectWith(null, arguments);
@@ -318,16 +225,11 @@
             console.error("Page load failed: ", arguments);
         }).always(function () {
             //trigger after route
-<<<<<<< HEAD
             events.trigger("after-route", [page, node]);
-=======
-            $(events).trigger("after-route", [page, node]);
->>>>>>> d9dc60156afda9d7a2616a7b6d116f2fa7c15c60
         });
 
         return _def;
     };
-<<<<<<< HEAD
     //private vars
     var events = $({});
     //shim kendo
@@ -342,36 +244,10 @@
         options: {},
         events: ["init", "before-route", "after-route"],
         router: null,
-=======
-    //create a kendo router!
-    var router = null
-    //shim kendo
-    kendo.isArray = function (obj) {
-        if (obj && $.isArray(obj)) {
-            return true;
-        }
-        else if (obj && kendo.isFunction(obj.shift) && kendo.isFunction(obj.slice)) {
-            return true;
-        }
-
-        return false;
-    };
-    kendo.isObservableObject = function (obj) {
-        if (obj && $.type(obj.uid) == "string" && kendo.isFunction(obj.get) && kendo.isFunction(obj.set)) {
-            return true;
-        }
-
-        return false;
-    };
-    //and return the module...
-    var Class = kendo.Class.extend({
-        events: ["before-route", "after-route"],
->>>>>>> d9dc60156afda9d7a2616a7b6d116f2fa7c15c60
 
         init: function () {
             //constructor
         },
-<<<<<<< HEAD
         initialize: function (contentNode, options) {
             var self = this;
 
@@ -380,7 +256,7 @@
             if (contentNode) {
                 this.options.node = contentNode;
             }
-            
+
             if (kendo.mobile && kendo.mobile.Application && this.options.kendoMobileApplication && this.options.kendoMobileApplication instanceof kendo.mobile.Application) {
                 //use the router from the mobil app, no need for 2!
                 this.router = this.options.kendoMobileApplication.router;
@@ -470,11 +346,11 @@
                         var initialNode = $("*[data-role='" + name + "view']:first").data(name + "View").element;
                         //need to move all inline declared views out into the main element for mobile stuff to work proper
                         initialNode.find("*[data-role='" + name + "view']").each(function () {
-                            var view = $(this).data(name+"View");
+                            var view = $(this).data(name + "View");
                             //move all mobile data-roles into main node so kendo.mobile.Application can pick them up...
                             $(this).data(name + "View").element.children("[data-role]").each(function () {
                                 //set the view variable
-                                $(this).data(name+"View", view);
+                                $(this).data(name + "View", view);
                                 //append to main node for kendo.mobile.Application
                                 initialNode.append(this);
                             });
@@ -519,55 +395,17 @@
             }
             else {
                 console.error("Arguments Exception", "Page is empty; Usage: replace(String page)");
-=======
-        initialize: function (contentNode, startPage) {
-            if ($.type(contentNode) == "object") {
-                router = new kendo.Router({ pushState: false, root: startPage });
-                //setup the router...
-                router.route("/*page", function (page, args) {
-                    go(contentNode, page, args);
-                });
-                //and start the routing...
-                router.start();
-                //run default route?
-                var hIdx = location.href.indexOf("#");
-                if ($.trim(startPage).length && (hIdx < 0 || hIdx == (location.href.length-1))) {
-                    this.route(startPage);
-                }
-            }
-            else {
-                console.error("Could not initialize app, invalid content node!");
-            }
-        },
-        route: function (page, silent) {
-            if (!router) {
-                console.error("App not initialized: call initialize(DomNode contentNode, String startPage)");
-                return
-            }
-            if ($.type(page) == "string" && $.trim(page).length > 0) {
-                router.navigate("/" + page, silent);
-            }
-            else {
-                console.error("Arguments Exception", "Page is empty; Usage: route(String page)");
->>>>>>> d9dc60156afda9d7a2616a7b6d116f2fa7c15c60
             }
         },
         load: function (node, page, args) {
             //stuff the view into the node
             if ($.type(page) == "string" && $.trim(page).length > 0 && $.type(node) == "object") {
-<<<<<<< HEAD
-=======
-                if (page.substring(0, 1) == "/") {
-                    page = page.substring(1, page.length);
-                }
->>>>>>> d9dc60156afda9d7a2616a7b6d116f2fa7c15c60
                 return go(node, page, args);
             }
             else {
                 console.error("Arguments Exception", "Page is empty or node is not a DOM element; Usage: load(String page, DomNode node)");
             }
         },
-<<<<<<< HEAD
         showLoading: function () {
             if (this.options.kendoMobileApplication) {
                 this.options.kendoMobileApplication.showLoading();
@@ -613,17 +451,4 @@
     window[name] = new Class();
 
     return window[name];
-=======
-        bind: function (event, method) {
-            if ($.type(event) == "string" && $.trim(event).length > 0 && $.isFunction(method)) {
-                $(events).bind(event, method);
-            }
-            else {
-                console.error("Arguments Exception", "Event is empty or method is not a function; Usage: bind(String event, Function method)");
-            }
-        }
-    });
-    //singleton
-    window[name] = new Class();
->>>>>>> d9dc60156afda9d7a2616a7b6d116f2fa7c15c60
 })();
