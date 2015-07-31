@@ -25,7 +25,7 @@
             deps: ['mokuso'],
             callback: function (mokuso) {
                 //initialize SPA framework
-                mokuso.initialize($("#content"), "Home");
+                mokuso.initialize($("#content"), { initial: "Home" });
                 //load nav into node outside of router content node, so it persists
                 mokuso.load($("#nav"),"Navigation");
             }
