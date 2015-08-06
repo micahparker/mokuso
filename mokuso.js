@@ -268,7 +268,9 @@
                 this.router = new kendo.Router({ pushState: this.options.pushState, hashBang: this.options.hasBang, root: this.options.root });
                 //setup the router...
                 this.router.route("*page", function (page, args) {
-                    go(self.options.node, page, args);
+                    go(self.options.node, page, args).fail(function () {
+                        self.router.trigger("routeMissing");
+                    });
                 });
                 //run default route?
                 var hIdx = location.href.indexOf("#");
