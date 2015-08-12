@@ -106,7 +106,9 @@
                 //trigger before route
                 events.trigger("before-route", [page, node]);
                 //get view
-                return getView(page).always(function (view) {
+                return getView(page).fail(function (_e) {
+                    def.rejectWith(null, [_e])
+                }).then(function (view) {
                     def.resolveWith(null, [view]);
                 });
             });
@@ -221,9 +223,7 @@
         });
 
         //hide loading
-        _def.fail(function () {
-            console.error("Page load failed: ", arguments);
-        }).always(function () {
+        _def.always(function () {
             //trigger after route
             events.trigger("after-route", [page, node]);
         });
@@ -268,8 +268,8 @@
                 this.router = new kendo.Router({ pushState: this.options.pushState, hashBang: this.options.hasBang, root: this.options.root });
                 //setup the router...
                 this.router.route("*page", function (page, args) {
-                    go(self.options.node, page, args).fail(function () {
-                        self.router.trigger("routeMissing");
+                    go(self.options.node, page, args).fail(function (_e) {
+                        self.router.trigger("routeMissing", _e);
                     });
                 });
                 //run default route?
