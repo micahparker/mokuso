@@ -1,21 +1,21 @@
 <div data-role="layout" data-id="default">
 	<header data-role="header">
 		<div data-role="navbar">
-            <a data-role="button" data-rel="drawer" href="#drawer" data-icon="hamburger" data-align="left"></a>
+            <a data-role="button" data-rel="drawer" href="#default-drawer" data-icon="hamburger" data-align="left"></a>
             <span data-role="view-title"></span>
 		</div>
 	</header>
 </div>
-<div data-role="drawer" id="drawer">
-	<header data-role="header">Sample</header>
-	<ul data-role="listview">
-        <li><a href="#home" data-transition="none">Home</a></li>
-        <li><a href="#nothome" data-transition="none">Not Home</a></li>
+<div data-role="drawer" id="default-drawer">
+	<header data-role="header" style="font-size:20px;text-align:center;padding:12px;">Menu</header>
+	<ul data-role="listview" class="km-listview-icons" style="position:absolute;width:100%;top:0;">
+        <li data-icon="home"><a href="#home">Home</a></li>
+        <li data-icon="globe"><a href="#nothome">Not Home</a></li>
     </ul>
 </div>
-<div data-role="view" id="home" data-layout="default" data-title="Home">
+<div data-role="view" id="home" data-title="Home" data-layout="default" >
 	<div data-role="mokusoview" data-view="Home"></div>
 </div>
-<div data-role="view" id="nothome" data-layout="default" data-title="Not Home">
+<div data-role="view" id="nothome" data-title="Home" data-layout="default" >
 	<div data-role="mokusoview" data-view="NotHome"></div>
 </div>

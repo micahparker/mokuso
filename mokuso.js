@@ -47,7 +47,7 @@ define(function () {
 				url: require.toUrl("view/" + page + ".html")
 			}).promise();
 		},
-		go: function (_node, _page, _args) {
+		go: function (_node, _page, _args, _mobile) {
 			if ($.type(_page) != "string" || $.trim(_page).length <= 0 || $.type(_node) != "object") {
 				//improper args... lets get outta here!
 				return;
@@ -239,46 +239,39 @@ define(function () {
 			_.handleModuleHook(this, this.modules, "beforeInit").then(function () {
 				//create router
 				if (isMobile && kendo.mobile && kendo.mobile.Application) {
-					var def = null;
+					var def = $.Deferred();
 					//the initial view needs to get loaded before the mobileApp is created, it should contain all the mobile views
 					if ($.type(self.options.initial) == "string" && $.trim(self.options.initial).length > 0) {
-						def = self.load(self.options.node, options.initial).then(function () {
-							var initialNode = $("*[data-role='" + name + "view']:first").data(name + "View").element;
-							//need to move all inline declared views out into the main element for mobile stuff to work proper
-							initialNode.find("*[data-role='" + name + "view']").each(function () {
-								var _node = $(this);
-								var view = _node.data(name + "View");
-								//move all mobile data-roles into main node so kendo.mobile.Application can pick them up...
-								view.element.children("[data-role]").each(function () {
-									var __node = $(this);
-									//set the view variable
-									__node.data(name + "View", view);
-									//append to main node for kendo.mobile.Application
-									initialNode.append(__node);
-								});
-							});
-						}).then(function () {
-							self.options.initial = null;
+						self.load(self.options.node, options.initial, {}, true).then(function () {
+							//need to move all nodes from view out into the body for mobile stuff to work proper
+							self.options.node.prepend($("*[data-role='" + name + "view']:first").data(name + "View").element.children());
+							//get rid of the mokuso
 							//create kendo.mobile.Application off the newly minted inital view
-							self.mobileApp = new kendo.mobile.Application($("*[data-role='" + name + "view']:first").data(name + "View").element, self.options);
+							self.mobileApp = new kendo.mobile.Application(self.options.node, $.extend($.extend({},self.options), {
+								//override these options for the Application without overwriting self.options
+								initial: null,
+								init: function () { setTimeout(function () { def.resolve(); }, 10); }
+							}));
 						});
 					}
 					else {
-						self.options.initial = null
-						//assume the content for the mobile app is already there!
-						self.mobileApp = new kendo.mobile.Application(self.options.node, self.options);
+						//assume the content for the mobile app is already in the desired node
+						self.mobileApp = new kendo.mobile.Application(self.options.node, $.extend($.extend({},self.options), {
+							//override these options for the Application without overwriting self.options
+							init: function () { setTimeout(function () { def.resolve(); }, 10); }
+						}));
 					}
 					return $.when(def).then(function () {
 						//use the router from the mobile app, no need for 2!
 						self.router = self.mobileApp.router;
-						//bind to router to we can trigger events here
+						//bind to router to we can trigger events here (best we can do for a kendoMobileApp router?)
 						self.router.bind("change", function (e) {
 							//trigger before route
 							self.trigger("before-route", [e.url, self.options.node]);
 							//trigger after route right after cause mobile stuff happens right away, no loading...
 							setTimeout(function () {
 								self.trigger("after-route", [e.url, self.options.node]);		
-							})
+							},10)
 						});
 					});
 				}
@@ -311,15 +304,15 @@ define(function () {
 							location.href = location.href.substring(0, hIdx) + "#" + self.options.initial;
 						}
 					}
-					//call init callbacks
-					if ($.isFunction(self.options.init)) {
-						self.options.init();
-					}
 				}
 			}).then(function () {
 				//and start the routing...
 				return _.handleModuleHook(self, self.modules, "afterInit").then(function () {
 					self.router.start();
+					//call init callbacks
+					if ($.isFunction(self.options.init)) {
+						self.options.init(self);
+					}
 				});
 			});
         },
@@ -373,7 +366,7 @@ define(function () {
         load: function (node, page, args) {
             //stuff the view into the node
             if ($.type(page) == "string" && $.trim(page).length > 0 && $.type(node) == "object") {
-                return _.go(node, page, args);
+                return _.go.apply(_, arguments);
             }
             else {
                 console.error("Arguments Exception", "Page is empty or node is not a DOM element; Usage: load(String page, DomNode node)");
