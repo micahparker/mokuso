@@ -1,0 +1,21 @@
+<div data-role="layout" data-id="default">
+	<header data-role="header">
+		<div data-role="navbar">
+            <a data-role="button" data-rel="drawer" href="#drawer" data-icon="hamburger" data-align="left"></a>
+            <span data-role="view-title"></span>
+		</div>
+	</header>
+</div>
+<div data-role="drawer" id="drawer">
+	<header data-role="header">Sample</header>
+	<ul data-role="listview">
+        <li><a href="#home" data-transition="none">Home</a></li>
+        <li><a href="#nothome" data-transition="none">Not Home</a></li>
+    </ul>
+</div>
+<div data-role="view" id="home" data-layout="default" data-title="Home">
+	<div data-role="mokusoview" data-view="Home"></div>
+</div>
+<div data-role="view" id="nothome" data-layout="default" data-title="Not Home">
+	<div data-role="mokusoview" data-view="NotHome"></div>
+</div>

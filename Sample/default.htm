@@ -2,17 +2,17 @@
 <html xmlns="http://www.w3.org/1999/xhtml">
 <head>
     <title></title>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/kendo-ui-core/2014.1.416/styles/kendo.common.min.css" />
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/kendo-ui-core/2014.1.416/styles/kendo.metro.min.css" />   
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.1.18/require.min.js"></script>
+    <link rel="stylesheet" href="http://cdn.kendostatic.com/2015.1.429/styles/kendo.common.min.css" />
+    <link rel="stylesheet" href="http://cdn.kendostatic.com/2015.1.429/styles/kendo.metro.min.css" />
+    <link rel="stylesheet" href="http://cdn.kendostatic.com/2015.1.429/styles/kendo.mobile.all.min.css" />   
+    <script src="http://cdnjs.cloudflare.com/ajax/libs/require.js/2.1.20/require.min.js"></script>
     <script>
         //get libs and deps via require.js
         require.config({
             baseUrl: "",
             paths: {
-                'jquery': 'https://cdnjs.cloudflare.com/ajax/libs/jquery/2.1.4/jquery.min',
-                'moment': 'https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.10.3/moment.min',
-                'kendo': 'https://cdnjs.cloudflare.com/ajax/libs/kendo-ui-core/2014.1.416/js/kendo.ui.core.min',
+                'jquery': 'http://cdn.kendostatic.com/2015.1.429/js/jquery.min',
+                'kendo': 'http://cdn.kendostatic.com/2015.1.429/js/kendo.ui.core.min',
                 'mokuso': 'Scripts/mokuso.min',
                 'viewmodel': 'ViewModels',
                 'view': 'Views'
@@ -24,10 +24,20 @@
             },
             deps: ['mokuso'],
             callback: function (mokuso) {
-                //initialize SPA framework
-                mokuso.initialize($("#content"), { initial: "Home" });
-                //load nav into node outside of router content node, so it persists
-                mokuso.load($("#nav"),"Navigation");
+                //initialize mokuso
+                if (kendo.support.mobileOS) {
+                    window.app = new mokuso($("#content"), { initial: "Mobile" }, true);
+                }
+                else {
+                    window.app = new mokuso($("#content"), { initial: "Home", modules: [
+                        new (mokuso.Module.extend({ 
+                            beforeInit: function (app) {
+                                //make sure the app loads the Navigation view before doing anything else! 
+                                return app.load($("#nav"),"Navigation"); 
+                            }
+                        }))()
+                    ]});
+                }
             }
         });
     </script>
