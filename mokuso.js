@@ -178,18 +178,21 @@ define(function () {
                         Class.GlobalMobileModels[uid] = _modelview
                         _node.each(function (n) {
                             var __node = $(this);
-                            if ((__node.attr("data-role") || "").toLowerCase() == "view") {
+							var __role = $.trim(__node.attr("data-role") || "").toLowerCase();
+                            if (__role.length) {
                                 //add model binding
                                 __node.attr("data-model", name + ".GlobalMobileModels." + uid);
                                 //add init event bindings...
-                                var bindAttr = (__node.attr("data-bind") || "").replace(new RegExp("events([ ]{0,}):([ ]{0,}){","i"),"events:{");
-                                var bindAttrIdx = bindAttr.indexOf("events:{");
-                                if (bindAttrIdx> -1) {
-                                    __node.attr("data-bind", bindAttr.substring(0,bindAttrIdx+8) + " init: __________init, " + bindAttr.substring(bindAttrIdx+8, bindAttr.length));
-                                }
-                                else {
-                                    __node.attr("data-bind", $.merge((bindAttr.length ? bindAttr.split(",") : []),["events: { init: __________init }"]).join(","));
-                                }
+								if (__role == "view") {
+									var bindAttr = (__node.attr("data-bind") || "").replace(new RegExp("events([ ]{0,}):([ ]{0,}){","i"),"events:{");
+									var bindAttrIdx = bindAttr.indexOf("events:{");
+									if (bindAttrIdx> -1) {
+										__node.attr("data-bind", bindAttr.substring(0,bindAttrIdx+8) + " init: __________init, " + bindAttr.substring(bindAttrIdx+8, bindAttr.length));
+									}
+									else {
+										__node.attr("data-bind", $.merge((bindAttr.length ? bindAttr.split(",") : []),["events: { init: __________init }"]).join(","));
+									}
+								}
                             }
                         });
                         
