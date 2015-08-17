@@ -28,13 +28,13 @@ Unlike other frameworks, there is much less to learn to get started. With that s
 Use mokuso to load a HTML file into an element:
 
 ```javascript
-mokuso.load($("#nav"),"Navigation");
+new mokuso($("#nav"), { initial: "Navigation" });
 ```
 
 Specify an element to contain the main content for your application. In the case below, the page will navigate to 'http://yoursite.com#/Home' and will open 'Home.html' inside the *content* element.
 
 ```javascript
-mokuso.initialize($("#content"), "Home");
+new mokuso($("#content"), { initial: "Home" });
 ```
 
 For each HTML file, include a view model JavaScript file with the same name. View models should include the following functions:
