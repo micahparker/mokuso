@@ -21,18 +21,16 @@ define(function () {
 	
 			return false;
 		},
-		handleModuleHook: function (app, modules, hook) {
+		handleModuleHook: function (modules, hook, args) {
 			var defs = [];
 			for (var x=0; x < modules.length; x++) {
 				if ($.isFunction(modules[x][hook])) {
-					defs.push(modules[x][hook](app));
+					defs.push(modules[x][hook].apply(modules[x][hook], args || []));
 				}
 			}
-			return $.when(defs);
+			return $.when.apply(null,defs);
 		},
 		render: function (kendoView, node, args) {
-			//call model's preinit
-			kendoView.model.preinit(node, args);
 			//nest inside parent Layout?
 			var parentLayout = node.parents("*[data-role='" + name + "view']:first").data(name + "View");
 			if (parentLayout && parentLayout instanceof kendo.Layout) {
@@ -47,7 +45,65 @@ define(function () {
 				url: require.toUrl("view/" + page + ".html")
 			}).promise();
 		},
-		go: function (_node, _page, _args, _mobile) {
+        findNestedViews: function (_node, _parentModel, _mobile) {
+            var _defs = [];
+            _node.find("*[data-role='" + name + "view']").addBack("*[data-role='" + name + "view']").each(function (i, n) {
+				console.log(n)
+				var _n = $(n);
+				var _args = new kendo.data.ObservableObject({});
+				//parse out any args
+				if ($.trim(_n.attr("data-view-args")).length) {
+                    var arrBindFields = [];
+				    var __args = {};
+                    if (_parentModel) {
+					    with (_parentModel) {
+						    try {
+							    //is there any other way to do this?? not very performant at scale...
+							    eval("__args = " + _n.attr("data-view-args"));
+						    }
+						    catch (ex) {
+							    //eval didnt work most likely
+							    console.error("Argument Parsing Error", "Could not parse inline page arguments: " + _n.attr("data-view-args"));
+						    }
+                        }
+                    }
+					//get string representation of properties from and to for binding from and to ObservableObjects
+					for (var fProp in __args) {
+						var _type = $.type(__args[fProp]);
+						if (_type == "string" || _type == "number" || _type == "object") {
+							_args.set(fProp, __args[fProp]);
+						}
+						else {
+							for (var tProp in _parentModel) {
+								if (__args[fProp] === _parentModel[tProp]) {
+									arrBindFields.push({ f: fProp, t: tProp });
+									//set initial value
+									_args.set(fProp, _parentModel.get(tProp));
+									break;
+								}
+							}
+						}
+					}
+					if (arrBindFields.length) {
+						//now bind to the parent model to detect and pass on any changes...
+						_parentModel.bind("change", function (e) {
+							for (var x = 0; x < arrBindFields.length; x++) {
+								if (arrBindFields[x].t == e.field) {
+									//update child arguments
+									_args.set(arrBindFields[x].t, this.get(e.field));
+									break;
+								}
+							}
+						});
+					}
+				}
+				//load page in node, if mobile setup the kendo.mobile.app to work on initialize
+				_defs.push(_.go(_n, _n.attr("data-view"), _args, _mobile, _mobile));
+			});
+			//await nested pages then resolve go deferred
+			return $.when.apply($, _defs);
+        },
+		go: function (_node, _page, _args, _mobile, _setupmobileviews) {
 			if ($.type(_page) != "string" || $.trim(_page).length <= 0 || $.type(_node) != "object") {
 				//improper args... lets get outta here!
 				return;
@@ -103,94 +159,84 @@ define(function () {
 			}
 			//get viewmodel
 			require(["viewmodel/" + page], function (modelview) {
+                var _modelview = kendo.observable($.extend(true, {
+					//before the view is rendered
+					preinit: function (node, args) { },
+					//after the view is rendered
+					init: function (node, args) { },
+                    __________init: function (e) { return this.init(e.view.element, e.sender.params); },
+					//before the view is destroyed
+					deinit: function (node) { },
+				}, modelview));
 				//wait for view
 				def.then(function (view) {
-					var kendoView = new kendo.View("<div>" + view + "</div>", {
-						model: kendo.observable($.extend(true, {
-							//before the view is rendered
-							preinit: function (node, args) { },
-							//after the view is rendered
-							init: function (node, args) { },
-							//before the view is destroyed
-							deinit: function (node) { },
-						}, modelview)),
-						init: function () {
-							var self = this;
-							var node = this.element.parent();
-							//make sure some attribs are set
-							node.attr("data-role", name + "view");
-							node.attr("data-view", page);
-							//call init and wait...
-							$.when(this.model.init(this.element, args)).always(function () {
-								var _model = self.model;
-								var _element = self.element;
-								var _defs = [];
-								//now, process sub pages
-								_element.find("*[data-role='" + name + "view']").each(function (i, n) {
-									var _n = $(n);
-									var _args = new kendo.data.ObservableObject({});
-									//parse out any args
-									if ($.trim(_n.attr("data-view-args")).length) {
-										with (_model) {
-											var arrBindFields = [];
-											var __args = {};
-											try {
-												//is there any other way to do this?? not very performant at scale...
-												eval("__args = " + _n.attr("data-view-args"));
-											}
-											catch (ex) {
-												//eval didnt work most likely
-												console.error("Argument Parsing Error", "Could not parse inline page arguments: " + _n.attr("data-view-args"));
-											}
-											//get string representation of properties from and to for binding from and to ObservableObjects
-											for (var fProp in __args) {
-												var _type = $.type(__args[fProp]);
-												if (_type == "string" || _type == "number" || _type == "object") {
-													_args.set(fProp, __args[fProp]);
-												}
-												else {
-													for (var tProp in _model) {
-														if (__args[fProp] === _model[tProp]) {
-															arrBindFields.push({ f: fProp, t: tProp });
-															//set initial value
-															_args.set(fProp, _model.get(tProp));
-															break;
-														}
-													}
-												}
-											}
-											if (arrBindFields.length) {
-												//now bind to the parent model to detect and pass on any changes...
-												_model.bind("change", function (e) {
-													for (var x = 0; x < arrBindFields.length; x++) {
-														if (arrBindFields[x].t == e.field) {
-															//update child arguments
-															_args.set(arrBindFields[x].t, this.get(e.field));
-															break;
-														}
-													}
-												});
-											}
-										}
-									}
-									//load page in node...
-									_defs.push(_.go(_n, _n.attr("data-view"), _args));
-								});
-								//await nested pages then resolve go deferred
-								$.when.apply($, _defs).then(function () {
-									_def.resolve();
-								}).fail(function () {
-									//fail go deferred
-									_def.rejectWith(null, arguments);
-								});
+                    if (_setupmobileviews) {
+                        //no view creation, just setup for kendo.mobile.Application
+                        var _node = $(view);
+                        var uid = "a"+kendo.guid().replace(new RegExp("-","g"),"");
+                        //set global model
+                        Class.GlobalMobileModels[uid] = _modelview
+                        _node.each(function (n) {
+                            var __node = $(this);
+                            if ((__node.attr("data-role") || "").toLowerCase() == "view") {
+                                //add model binding
+                                __node.attr("data-model", name + ".GlobalMobileModels." + uid);
+                                //add init event bindings...
+                                var bindAttr = (__node.attr("data-bind") || "").replace(new RegExp("events([ ]{0,}):([ ]{0,}){","i"),"events:{");
+                                var bindAttrIdx = bindAttr.indexOf("events:{");
+                                if (bindAttrIdx> -1) {
+                                    __node.attr("data-bind", bindAttr.substring(0,bindAttrIdx+8) + " init: __________init, " + bindAttr.substring(bindAttrIdx+8, bindAttr.length));
+                                }
+                                else {
+                                    __node.attr("data-bind", $.merge((bindAttr.length ? bindAttr.split(",") : []),["events: { init: __________init }"]).join(","));
+                                }
+                            }
+                        });
+                        
+                        //call preinit and process nested views
+                        return $.when(_modelview.preinit(node, args)).then(function () {
+                            //render setup
+                            var _element = _node.insertAfter(node);
+                            //await nested pages then resolve go deferred (dont nest them as mobile...)
+                            return _.findNestedViews(_element, _modelview, false).then(function () {
+								_def.resolve();
+							}).fail(function () {
+								//fail go deferred
+								_def.rejectWith(null, arguments);
 							});
-						},
-						wrap: false,
-					});
-					//set data and attribute(s)
-					node.data(name + "View", kendoView);
-					//render!
-					_.render(kendoView, node, args);
+                        });
+                    }
+                    else {
+                        //create a view and render it in the provided node...
+					    var kendoView = new kendo.View("<div>" + view + "</div>", {
+						    model: _modelview,
+						    init: function () {
+							    var self = this;
+							    var node = this.element.parent();
+							    //make sure some attribs are set
+							    node.attr("data-role", name + "view");
+							    node.attr("data-view", page);
+							    //call init and wait...
+							    $.when(this.model.init(this.element, args)).always(function () {
+								    //await nested pages then resolve go deferred
+								    _.findNestedViews(self.element, self.model, _mobile).then(function () {
+									    _def.resolve();
+								    }).fail(function () {
+									    //fail go deferred
+									    _def.rejectWith(null, arguments);
+								    });
+							    });
+						    },
+						    wrap: false,
+					    });
+					    //set data and attribute(s)
+					    node.data(name + "View", kendoView);
+                        //call preinit
+			            return $.when(_modelview.preinit(node, args)).then(function () {
+					        //render!
+					        _.render(kendoView, node, args);
+                        });
+                    }
 				}).fail(function () {
 					//fail go deferred
 					_def.rejectWith(null, arguments);
@@ -208,10 +254,12 @@ define(function () {
     
 	var Class = kendo.Class.extend({
         options: {},
-        events: $(["init", "before-route", "after-route"]),
+        events: ["init", "before-navigate", "after-navigate", "before-load", "after-load"],
         router: null,
 		mobileApp: null,
 		modules: [],
+
+        _events: $({}),
 
         init: function (contentNode, options, isMobile) {
             //constructor - where the magic happens...
@@ -236,7 +284,7 @@ define(function () {
 				this.registerModule(this.options.modules[x]);
 			}
 			//run beforeInit module hooks before we kick anything off...
-			_.handleModuleHook(this, this.modules, "beforeInit").then(function () {
+			_.handleModuleHook(this.modules, "beforeInit", [this]).then(function () {
 				//create router
 				if (isMobile && kendo.mobile && kendo.mobile.Application) {
 					var def = $.Deferred();
@@ -245,7 +293,6 @@ define(function () {
 						self.load(self.options.node, options.initial, {}, true).then(function () {
 							//need to move all nodes from view out into the body for mobile stuff to work proper
 							self.options.node.prepend($("*[data-role='" + name + "view']:first").data(name + "View").element.children());
-							//get rid of the mokuso
 							//create kendo.mobile.Application off the newly minted inital view
 							self.mobileApp = new kendo.mobile.Application(self.options.node, $.extend($.extend({},self.options), {
 								//override these options for the Application without overwriting self.options
@@ -267,10 +314,10 @@ define(function () {
 						//bind to router to we can trigger events here (best we can do for a kendoMobileApp router?)
 						self.router.bind("change", function (e) {
 							//trigger before route
-							self.trigger("before-route", [e.url, self.options.node]);
+							self.trigger("before-navigate", [e.url, self.options.node]);
 							//trigger after route right after cause mobile stuff happens right away, no loading...
 							setTimeout(function () {
-								self.trigger("after-route", [e.url, self.options.node]);		
+								self.trigger("after-navigate", [e.url, self.options.node]);		
 							},10)
 						});
 					});
@@ -280,18 +327,18 @@ define(function () {
 					self.router = new kendo.Router({ pushState: self.options.pushState, hashBang: self.options.hasBang, root: self.options.root });
 					//setup the router...
 					self.router.route("*page", function (page, args) {
-						_.handleModuleHook(self, self.modules, "beforeRoute").then(function () {
+						_.handleModuleHook(self.modules, "beforeNavigate", [self.options.node, page, args]).then(function () {
 							//trigger after route
-							self.trigger("before-route", [page, self.options.node]);
+							self.trigger("before-navigate", [page, self.options.node]);
 							//insert the view into contentNode
 							_.go(self.options.node, page, args).fail(function (_e) {
 								self.router.trigger("routeMissing", _e);
 							}).then(function () {
 								//trigger after route
-								self.events.trigger("after-route", [page, self.options.node]);
+								self.trigger("after-navigate", [page, self.options.node]);
 							});
 						}).then(function () {
-							return _.handleModuleHook(self, self.modules, "afterRoute");
+							return _.handleModuleHook(self.modules, "afterNavigate", [self.options.node, page, args]);
 						});
 					});
 					//run default route?
@@ -307,12 +354,14 @@ define(function () {
 				}
 			}).then(function () {
 				//and start the routing...
-				return _.handleModuleHook(self, self.modules, "afterInit").then(function () {
-					self.router.start();
-					//call init callbacks
-					if ($.isFunction(self.options.init)) {
-						self.options.init(self);
-					}
+				return _.handleModuleHook(self.modules, "afterInit", [self]).then(function () {
+                    if (!self.mobileApp) {
+					    self.router.start();
+                    }
+                    //call init callbacks
+				    if ($.isFunction(self.options.init)) {
+					    self.options.init(self);
+				    }
 				});
 			});
         },
@@ -364,9 +413,18 @@ define(function () {
             }
         },
         load: function (node, page, args) {
+            var self = this;
+            var _arguments = arguments;
             //stuff the view into the node
             if ($.type(page) == "string" && $.trim(page).length > 0 && $.type(node) == "object") {
-                return _.go.apply(_, arguments);
+                return _.handleModuleHook(this.modules, "beforeLoad", [node, page, args]).then(function () {
+                    self.trigger("before-load", [node, page, args]);
+                    return _.go.apply(_, _arguments);
+                }).then(function () {
+                    return _.handleModuleHook(self.modules, "afterLoad", [node, page, args]).then(function () {
+                        self.trigger("after-load", [node, page, args]);
+                    });
+                });
             }
             else {
                 console.error("Arguments Exception", "Page is empty or node is not a DOM element; Usage: load(String page, DomNode node)");
@@ -392,7 +450,7 @@ define(function () {
                     this.mobileApp.bind.apply(this.mobileApp, arguments)
                 }
                 else {
-                    this.events.bind.apply(this.events, arguments);
+                    this._events.bind.apply(this._events, arguments);
                 }
             }
             else {
@@ -405,7 +463,7 @@ define(function () {
                     this.mobileApp.trigger.apply(this.mobileApp, arguments)
                 }
                 else {
-                    this.events.trigger.apply(this.events, arguments);
+                    this._events.trigger.apply(this._events, arguments);
                 }
             }
             else {
@@ -426,12 +484,19 @@ define(function () {
 	//add some static vars
 	
 	Class.Module = kendo.Class.extend({
-		beforeInit: function () {},
-		afterInit: function () {},
-		beforeRoute: function () {},
-		afterRoute: function () {}
+		beforeInit: function (app) {},
+		afterInit: function (app) {},
+		beforeNavigate: function (node, page, args) {},
+		afterNavigate: function (node, page, args) {},
+        beforeLoad: function (node, page, args) {},
+		afterLoad: function (node, page, args) {}
 	});
+    Class.GlobalMobileModels = {};
 	
+    //set global var
+
+    window[name] = Class;
+
 	//return for require.js
 	
 	return Class;
