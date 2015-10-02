@@ -20,7 +20,7 @@
             shim: {
                 'jquery': { exports: 'jQuery' },
                 'kendo/kendo.core.min': { deps: ['jquery'] },
-                'mokuso': { deps: ['jquery','kendo/kendo.router.min', 'kendo/kendo.view.min'] },
+                'mokuso': { deps: ['jquery','kendo/kendo.router.min', 'kendo/kendo.view.min'], exports: 'mokuso' },
             },
             deps: ['mokuso'],
             callback: function (mokuso) {
