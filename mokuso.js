@@ -1,4 +1,4 @@
-define(function () {
+(function () {
     var name = "mokuso";
 
     //private functions (wrapped up all nicely into a singleton)
@@ -87,37 +87,65 @@ define(function () {
             //await nested pages then resolve go deferred
             return $.when.apply($, _defs);
         },
-        createRenderer: function (renderer) {
+        createRenderer: function (renderer, options, resolver) {
             var type = $.type(renderer);
 
             if (type == "function") {
-                var renderer = new renderer();
+                var renderer = new renderer(options, resolver);
                 if (renderer instanceof _renderer) {
                     return renderer;
                 }
             }
-
             else if ($.type(renderer) == "string") {
                 switch (renderer.toLowerCase()) {
                     case 'kendomobile':
-                        return new _renderer_KendoMobile();
+                        return new _renderer_KendoMobile(options, resolver);
                         break;
                     case 'react':
-                        return new _renderer_React();
+                        return new _renderer_React(options, resolver);
                         break;
                     case 'knockout':
-                        return new _renderer_Knockout();
+                        return new _renderer_Knockout(options, resolver);
                         break;
                 }
             }
 
-            return new _renderer_Kendo();
+            return new _renderer_Kendo(options, resolver);
+        },
+        createResolver: function (resolver, options) {
+            var type = $.type(resolver);
+
+            if (type == "function") {
+                var resolver = new resolver(options);
+                if (resolver instanceof _resolver) {
+                    return resolver;
+                }
+            }
+            else if ($.type(resolver) == "string") {
+                switch (resolver.toLowerCase()) {
+                    case 'browserify':
+                        return new _renderer_Browserify(options);
+                        break;
+                }
+            }
+
+            return new _resolver_RequireJS(options);
         }
     }))();
+
+
 
     //rendering classes
 
     var _renderer = kendo.Class.extend({
+        options: {},
+
+        resolver: null,
+
+        init: function (_options, _resolver) {
+            this.options = _options;
+            this.resolver = _resolver;
+        },
         render: function (node, page, args) {
             //do something with me...
         }
@@ -166,7 +194,7 @@ define(function () {
                     node.empty();
                 }).always(function () {
                     //get view
-                    return self._getView(page).fail(function (_e) {
+                    return self.resolver.resolve(self.options.paths.view + "/" + page + ".html").fail(function (_e) {
                         def.rejectWith(null, [_e])
                     }).then(function (view) {
                         def.resolveWith(null, [view]);
@@ -177,10 +205,10 @@ define(function () {
             }
             else {
                 //get view
-                def = self._getView(page);
+                def = this.resolver.resolve(this.options.paths.view + "/" + page + ".html");
             }
             //get viewmodel
-            require(["viewmodel/" + page], function (modelview) {
+            this.resolver.resolve(this.options.paths.viewmodel + "/" + page + ".js").then(function (modelview) {
                 var _modelview = kendo.observable($.extend(true, {
                     //before the view is rendered
                     preinit: function (node, args) { },
@@ -197,17 +225,12 @@ define(function () {
                     //fail go deferred
                     _def.rejectWith(null, arguments);
                 });
-            }, function () {
+            }).fail(function () {
                 //fail go deferred
                 _def.rejectWith(null, arguments);
             });
 
             return _def;
-        },
-        _getView: function (page) {
-            return $.ajax({
-                url: require.toUrl("view/" + page + ".html")
-            }).promise();
         },
         _wireTogether: function (node, page, args, view, modelview, _def) {
             var self = this;
@@ -304,13 +327,15 @@ define(function () {
         render: function (node, page, args) {
             var _def = $.Deferred();
 
-            require(["view/" + page], function (view) {
+            this.resolver.resolve(this.options.paths.view + "/" + page + ".js").then(function (component) {
                 //clean up any old componenets in this node
                 React.unmountComponentAtNode(node[0]);
                 //render new component in node!
-                React.render(view, node[0], function () {
+                React.render(component, node[0], function () {
                     _def.resolve();
                 });
+            }).fail(function () {
+                _def.rejectWith(null, arguments);
             });
 
             return _def;
@@ -320,34 +345,105 @@ define(function () {
     var _renderer_Knockout = _renderer.extend({
         render: function (node, page, args) {
             var _def = $.Deferred();
-            var _vdef = this._getView(page);
 
-            require(["viewmodel/" + page], function (modelview) {
-                _vdef.then(function (view) {
-                    //convert modelview to observables
-                    for (var key in modelview) {
-                        if ($.isArray(modelview[key])) {
-                            modelview[key] = ko.observableArray(modelview[key]);
-                        }
-                        else if (!$.isFunction(modelview[key])) {
-                            modelview[key] = ko.observable(modelview[key]);
-                        }
+            $.when(
+                this.resolver.resolve(this.options.paths.view + "/" + page + ".html"),
+                this.resolver.resolve(this.options.paths.viewmodel + "/" + page + ".js")
+            ).then(function (view, modelview) {
+                //convert modelview to observables
+                for (var key in modelview) {
+                    if (_.isArray(modelview[key])) {
+                        modelview[key] = ko.observableArray(modelview[key]);
                     }
-                    //clean out old views
-                    ko.cleanNode(node[0]);
-                    //insert html in do node
-                    node.html(view);
-                    //bind observables to node!
-                    ko.applyBindings(modelview, node[0]);
-                });
+                    else if (!$.isFunction(modelview[key])) {
+                        modelview[key] = ko.observable(modelview[key]);
+                    }
+                }
+                //clean out old views
+                ko.cleanNode(node[0]);
+                //insert html in do node
+                node.html(view);
+                //bind observables to node!
+                ko.applyBindings(modelview, node[0]);
+            }).fail(function () {
+                _def.rejectWith(null, arguments);
             });
 
             return _def;
+        }
+    });
+
+    //dependancy resolver
+
+    _resolver = kendo.Class.extend({
+        options: null,
+
+        init: function (_options) {
+            this.options = _options;
         },
-        _getView: function (page) {
-            return $.ajax({
-                url: require.toUrl("view/" + page + ".html")
-            }).promise();
+
+        resolve: function (page) {
+            //override me
+            throw ("resolver didnt provide a resolve method.");
+        }
+    });
+
+    _resolver_JQuery = _resolver.extend({
+        resolve: function (page) {
+            var def = null;
+
+            if (page.match("js$")) {
+                //wont work...
+                def = $.ajax({
+                    url: page,
+                    dataType: "script"
+                }).promise();
+            }
+            else {
+                def = $.ajax({
+                    url: page
+                }).promise();
+            }
+
+            return def;
+        }
+    });
+
+    _resolver_RequireJS = _resolver.extend({
+        resolve: function (page) {
+            var def = null;
+            if (page.match("js$")) {
+                def = $.Deferred();
+                require([page.replace(new RegExp(".js$"), "")], function (dep) {
+                    def.resolveWith(null, [dep]);
+                }, function () {
+                    def.rejectWith(null, arguments);
+                });
+            }
+            else {
+                def = $.ajax({
+                    url: require.toUrl(page)
+                }).promise();
+            }
+
+            return def;
+        }
+    });
+
+    _resolver_Browserify = _resolver.extend({
+        resolve: function (page) {
+            var def = null;
+
+            if (page.match(".js$")) {
+                def = $.Deferred().resolveWith(null, [require(page.replace(new RegExp(".js$"), ""))]);
+            }
+            else {
+                def = $.ajax({
+                    url: page
+                }).promise();
+            }
+
+            return def;
         }
     });
 
@@ -362,6 +458,7 @@ define(function () {
 
         _events: $({}),
         _renderer: null,
+        _resolver: null,
 
         init: function (contentNode, options, isMobile) {
             //constructor - where the magic happens...
@@ -376,7 +473,12 @@ define(function () {
                 pushState: false,
                 hashBang: false,
                 modules: [],
-                renderer: "kendo"
+                paths: {
+                    view: "view",
+                    viewmodel: "viewmodel"
+                },
+                renderer: "kendo",
+                resolver: "requirejs"
             }, options);
 
             if (contentNode) {
@@ -386,8 +488,9 @@ define(function () {
             for (var x = 0; x < this.options.modules.length; x++) {
                 this.registerModule(this.options.modules[x]);
             }
-            //setup renderer
-            self._renderer = _.createRenderer(self.options.renderer);
+            //setup resolver and renderer
+            self._resolver = _.createResolver(self.options.resolver, self.options);
+            self._renderer = _.createRenderer(self.options.renderer, self.options, self._resolver);
             //run beforeInit module hooks before we kick anything off...
             _.handleModuleHook(this.modules, "beforeInit", [this]).then(function () {
                 //create router
@@ -395,7 +498,7 @@ define(function () {
                     var def = $.Deferred();
                     //the initial view needs to get loaded before the mobileApp is created, it should contain all the mobile views
                     if ($.type(self.options.initial) == "string" && $.trim(self.options.initial).length > 0) {
-                        self.load(self.options.node, options.initial, {}, _.createRenderer("kendomobile")).then(function () {
+                        self.load(self.options.node, options.initial, {}, _.createRenderer("kendomobile", self.options)).then(function () {
                             //need to move all nodes from view out into the body for mobile stuff to work proper
                             self.options.node.prepend($("*[data-role='" + name + "view']:first").data(name + "View").element.children());
                             //create kendo.mobile.Application off the newly minted inital view
@@ -593,6 +696,7 @@ define(function () {
     //add some static vars
 
     Class.Renderer = _renderer;
+    Class.Resolver = _resolver;
     Class.Module = kendo.Class.extend({
         beforeInit: function (app) { },
         afterInit: function (app) { },
@@ -606,8 +710,4 @@ define(function () {
     //set global var
 
     window[name] = Class;
-
-    //return for require.js
-
-    return Class;
-});
+})();
