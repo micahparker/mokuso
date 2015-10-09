@@ -710,4 +710,14 @@
     //set global var
 
     window[name] = Class;
+
+    //handle module loaders
+    if (typeof define == 'function' && define.amd) {
+        define(function () {
+            return Class;
+        });
+    }
+    else if (typeof module != 'undefined' && module.exports) {
+        module.exports = Class;
+    }
 })();
