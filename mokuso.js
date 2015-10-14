@@ -34,6 +34,7 @@
             var _defs = [];
             _node.find("*[data-role='" + name + "view']").addBack("*[data-role='" + name + "view']").each(function (i, n) {
                 var _n = $(n);
+                var _view = _n.attr("data-view");
                 var _args = new kendo.data.ObservableObject({});
                 //parse out any args
                 if ($.trim(_n.attr("data-view-args")).length) {
@@ -82,7 +83,7 @@
                     }
                 }
                 //load page in node, if mobile setup the kendo.mobile.app to work on initialize
-                _defs.push(_renderer.render(_n, _n.attr("data-view"), _args));
+                _defs.push(_renderer.render(_n, _view, _args));
             });
             //await nested pages then resolve go deferred
             return $.when.apply($, _defs);
@@ -148,6 +149,9 @@
         },
         render: function (node, page, args) {
             //do something with me...
+        },
+        destroy: function (node) {
+            //do something with me too!
         }
     });
 
@@ -167,46 +171,8 @@
             if (!(_node instanceof $)) {
                 node = $(_node);
             }
-            //destroy existing node first?
-            var inlineViews = node.find("*[data-role='" + name + "view']");
-            if (node.data(name + "View")) {
-                //add target node, it itself is a view...
-                inlineViews.push(node);
-            }
-            var def = null;
-            if (inlineViews.length) {
-                var ___def = $.Deferred();
-                def = $.Deferred();
-                //sort inlineViews by depth, destroying the deepest first...
-                var __def = $.map(inlineViews, function (node) {
-                    var n = $(node);
-                    return { depth: n.parents().length, node: n };
-                }).sort(function (a, b) {
-                    return b.depth - a.depth;
-                }).reduce(function (prev, curr, idx, arr) {
-                    return prev.then(function () {
-                        return curr.node.data(name + "View").model.deinit(curr.node);
-                    });
-                }, ___def);
-                //after they are all destroyed then resolve the main deferred
-                __def.always(function () {
-                    node.data(name + "View").destroy();
-                    node.empty();
-                }).always(function () {
-                    //get view
-                    return self.resolver.resolve(self.options.paths.view + "/" + page + ".html").fail(function (_e) {
-                        def.rejectWith(null, [_e])
-                    }).then(function (view) {
-                        def.resolveWith(null, [view]);
-                    });
-                });
-                //and go!
-                ___def.resolve();
-            }
-            else {
-                //get view
-                def = this.resolver.resolve(this.options.paths.view + "/" + page + ".html");
-            }
+            //get view
+            var def = self.resolver.resolve(self.options.paths.view + "/" + page + ".html");
             //get viewmodel
             this.resolver.resolve(this.options.paths.viewmodel + "/" + page + ".js").then(function (modelview) {
                 var _modelview = kendo.observable($.extend(true, {
@@ -232,38 +198,113 @@
 
             return _def;
         },
+        destroy: function (node) {
+            var def = null;
+            var parentLayout = node.parents("*[data-role='" + name + "view']:first").data(name + "View");
+            //destroy existing node first?
+            var inlineViews = node.find("*[data-role='" + name + "view']");
+            if (node.data(name + "View")) {
+                //add target node, it itself is a view...
+                inlineViews.push(node);
+            }
+            if (inlineViews.length) {
+                var ___def = $.Deferred();
+                def = $.Deferred();
+                //sort inlineViews by depth, destroying the deepest first...
+                var __def = $.map(inlineViews, function (node) {
+                    var n = $(node);
+                    return { depth: n.parents().length, node: n };
+                }).sort(function (a, b) {
+                    return b.depth - a.depth;
+                }).reduce(function (prev, curr, idx, arr) {
+                    return prev.then(function () {
+                        return curr.node.data(name + "View").model.deinit(curr.node);
+                    });
+                }, ___def);
+                //after they are all destroyed then resolve the main deferred
+                __def.then(function () {
+                    node.data(name + "View").destroy();
+                    node.empty();
+                    //resolve main!
+                    def.resolve();
+                }).fail(function () {
+                    //reject main...
+                    def.reject();
+                });
+                //and go!
+                ___def.resolve();
+            }
+
+            if (def == null) {
+                def = $.Deferred().resolve();
+            }
+
+            return def;
+        },
+        _initView: function (view, args) {
+            var self = this;
+
+            return $.when(view.model.init(view.element, args)).then(function () {
+                //await nested pages then resolve go deferred
+                return _.findNestedViews(view.element.children(), view.model, self);
+            });
+        },
         _wireTogether: function (node, page, args, view, modelview, _def) {
             var self = this;
             //create a view and render it in the provided node...
             var kendoView = new kendo.View("<div>" + view + "</div>", {
                 model: modelview,
                 init: function () {
-                    var _self = this;
-                    var node = this.element.parent();
+                    //set data and attribute(s)
+                    this.element.data(name + "View", this);
                     //make sure some attribs are set
-                    node.attr("data-role", name + "view");
-                    node.attr("data-view", page);
-                    //call init and wait...
-                    $.when(this.model.init(this.element, args)).always(function () {
-                        //await nested pages then resolve go deferred
-                        _.findNestedViews(_self.element, _self.model, self).then(function () {
+                    this.element.attr("data-role", name + "view");
+                    this.element.attr("data-view", page);
+                },
+                show: function (e) {
+                    debugger;
+                    //call init if there is no transition or its the only view in the node and wait...
+                    if (!self.options.transition || !e.sender.element.closest(self.options.node).length || !e.sender.element.siblings("[data-role=" + name + "view]").length) {
+                        return self._initView(this, args).then(function () {
                             _def.resolve();
                         }).fail(function () {
                             //fail go deferred
                             _def.rejectWith(null, arguments);
                         });
-                    });
+                    }
+                },
+                transitionEnd: function (e) {
+                    if (e.type == "hide" && !e.sender.___destroying) {
+                        e.sender.___destroying = true;
+                        return self.destroy(e.sender.element);
+                    }
+                    else if (self.options.transition) { //show
+                        return self._initView(this, args).then(function () {
+                            _def.resolve();
+                        }).fail(function () {
+                            //fail go deferred
+                            _def.rejectWith(null, arguments);
+                        });
+                    }
+                },
+                hide: function (e) {
+                    if (!e.sender.___destroying) {
+                        e.sender.___destroying = true;
+                        return self.destroy(e.sender.element);
+                    }
                 },
                 wrap: false,
             });
-            //set data and attribute(s)
-            node.data(name + "View", kendoView);
             //call preinit
             return $.when(modelview.preinit(node, args)).then(function () {
+                //strip attributes from here so they dont dup with View's element attrs
+                node.removeAttr("data-role");
+                node.removeAttr("data-view");
+                node.removeAttr("data-view-args");
                 //nest inside parent Layout?
                 var parentLayout = node.parents("*[data-role='" + name + "view']:first").data(name + "View");
-                if (parentLayout && parentLayout instanceof kendo.Layout) {
-                    parentLayout.showIn(kendoView, node);
+                if (parentLayout instanceof kendo.Layout) {
+                    parentLayout.showIn(node, kendoView, self.options.transition);
                 }
                 else {
                     kendoView.render(node);
@@ -468,7 +509,7 @@
                 node: $("body"),
                 initial: null,
                 init: null,
-                transition: null,
+                transition: "swap",
                 root: "/",
                 pushState: false,
                 hashBang: false,
@@ -480,8 +521,11 @@
                 renderer: "kendo",
                 resolver: "requirejs"
             }, options);
-
+            //setup node
             if (contentNode) {
+                if (!(contentNode instanceof $)) {
+                    contentNode = $(contentNode);
+                }
                 this.options.node = contentNode;
             }
             //set modules
@@ -498,7 +542,7 @@
                     var def = $.Deferred();
                     //the initial view needs to get loaded before the mobileApp is created, it should contain all the mobile views
                     if ($.type(self.options.initial) == "string" && $.trim(self.options.initial).length > 0) {
-                        self.load(self.options.node, options.initial, {}, _.createRenderer("kendomobile", self.options)).then(function () {
+                        self.load(self.options.node, options.initial, {}, _.createRenderer("kendomobile", self.options, self._resolver)).then(function () {
                             //need to move all nodes from view out into the body for mobile stuff to work proper
                             self.options.node.prepend($("*[data-role='" + name + "view']:first").data(name + "View").element.children());
                             //create kendo.mobile.Application off the newly minted inital view
@@ -533,7 +577,7 @@
                 else {
                     //setup router!
                     self.router = new kendo.Router({ pushState: self.options.pushState, hashBang: self.options.hasBang, root: self.options.root });
-                    //setup the router...
+                    //configure the router...
                     self.router.route("*page", function (page, args) {
                         _.handleModuleHook(self.modules, "beforeNavigate", [self.options.node, page, args]).then(function () {
                             //trigger after route
@@ -549,6 +593,15 @@
                             return _.handleModuleHook(self.modules, "afterNavigate", [self.options.node, page, args]);
                         });
                     });
+                    //set content node to layout
+                    var layout = new kendo.Layout("<div></div>", { wrap: true });
+                    //render layout & reset options.node
+                    layout.render(contentNode);
+                    self.options.node = contentNode.children().children();
+                    //fake view so the renderer picks it up
+                    var _node = contentNode.children();
+                    _node.attr("data-role", name + "view");
+                    _node.data(name + "View", layout);
                     //run default route?
                     var hIdx = location.href.indexOf("#");
                     if ($.trim(self.options.initial).length && (hIdx < 0 || hIdx == (location.href.length - 1))) {
@@ -710,14 +763,4 @@
     //set global var
 
     window[name] = Class;
-
-    //handle module loaders
-    if (typeof define == 'function' && define.amd) {
-        define(function () {
-            return Class;
-        });
-    }
-    else if (typeof module != 'undefined' && module.exports) {
-        module.exports = Class;
-    }
 })();
