@@ -262,7 +262,6 @@
                     this.element.attr("data-view", page);
                 },
                 show: function (e) {
-                    debugger;
                     //call init if there is no transition or its the only view in the node and wait...
                     if (!self.options.transition || !e.sender.element.closest(self.options.node).length || !e.sender.element.siblings("[data-role=" + name + "view]").length) {
                         return self._initView(this, args).then(function () {
