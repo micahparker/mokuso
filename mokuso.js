@@ -1,6 +1,4 @@
 (function () {
-    var name = "mokuso";
-
     //private functions (wrapped up all nicely into a singleton)
 
     var _ = new (kendo.Class.extend({
@@ -32,7 +30,7 @@
         },
         findNestedViews: function (_node, _parentModel, _renderer) {
             var _defs = [];
-            _node.find("*[data-role='" + name + "view']").addBack("*[data-role='" + name + "view']").each(function (i, n) {
+            _node.find("*[data-role='mokusoview']").addBack("*[data-role='mokusoview']").each(function (i, n) {
                 var _n = $(n);
                 var _view = _n.attr("data-view");
                 var _args = new kendo.data.ObservableObject({});
@@ -200,10 +198,9 @@
         },
         destroy: function (node) {
             var def = null;
-            var parentLayout = node.parents("*[data-role='" + name + "view']:first").data(name + "View");
             //destroy existing node first?
-            var inlineViews = node.find("*[data-role='" + name + "view']");
-            if (node.data(name + "View")) {
+            var inlineViews = node.find("*[data-role='mokusoview']");
+            if (node.data("mokusoView")) {
                 //add target node, it itself is a view...
                 inlineViews.push(node);
             }
@@ -218,12 +215,12 @@
                     return b.depth - a.depth;
                 }).reduce(function (prev, curr, idx, arr) {
                     return prev.then(function () {
-                        return curr.node.data(name + "View").model.deinit(curr.node);
+                        return curr.node.data("mokusoView").model.deinit(curr.node);
                     });
                 }, ___def);
                 //after they are all destroyed then resolve the main deferred
                 __def.then(function () {
-                    node.data(name + "View").destroy();
+                    node.data("mokusoView").destroy();
                     node.empty();
                     //resolve main!
                     def.resolve();
@@ -256,14 +253,14 @@
                 model: modelview,
                 init: function () {
                     //set data and attribute(s)
-                    this.element.data(name + "View", this);
+                    this.element.data("mokusoView", this);
                     //make sure some attribs are set
-                    this.element.attr("data-role", name + "view");
+                    this.element.attr("data-role", "mokusoview");
                     this.element.attr("data-view", page);
                 },
                 show: function (e) {
                     //call init if there is no transition or its the only view in the node and wait...
-                    if (!self.options.transition || !e.sender.element.closest(self.options.node).length || !e.sender.element.siblings("[data-role=" + name + "view]").length) {
+                    if (!self.options.transition || !e.sender.element.closest(self.options.node).length || !e.sender.element.siblings("[data-role=mokusoview]").length) {
                         return self._initView(this, args).then(function () {
                             _def.resolve();
                         }).fail(function () {
@@ -272,27 +269,40 @@
                         });
                     }
                 },
+                transitionStart: function (e) {
+                    //save previous values
+                    e.sender.element.data("_prevHeight", e.sender.element.css("height")).data("_prevWidth", e.sender.element.css("width"));
+                    e.sender.element.height(node.height()).width(node.width());
+                },
                 transitionEnd: function (e) {
+                    //reset size
+                    e.sender.element.css("height", e.sender.element.data("_prevHeight")).css("width", e.sender.element.data("_prevWidth"));
+                    //destry or init!
                     if (e.type == "hide" && !e.sender.___destroying) {
                         e.sender.___destroying = true;
-                        return self.destroy(e.sender.element);
+                        setTimeout(function () {
+                            self.destroy(e.sender.element);
+                        }, 250);
                     }
-                    else if (self.options.transition) { //show
-                        return self._initView(this, args).then(function () {
-                            _def.resolve();
-                        }).fail(function () {
-                            //fail go deferred
-                            _def.rejectWith(null, arguments);
-                        });
+                    else if (e.type == "show" && self.options.transition) {
+                        var _self = this;
+                        setTimeout(function () {
+                            self._initView(_self, args).then(function () {
+                                _def.resolve();
+                            }).fail(function () {
+                                //fail go deferred
+                                _def.rejectWith(null, arguments);
+                            });
+                        }, 250);
                     }
                 },
                 hide: function (e) {
                     if (!e.sender.___destroying) {
                         e.sender.___destroying = true;
-                        return self.destroy(e.sender.element);
+                        self.destroy(e.sender.element);
                     }
                 },
-                wrap: false,
+                wrap: false
             });
             //call preinit
             return $.when(modelview.preinit(node, args)).then(function () {
@@ -301,9 +311,9 @@
                 node.removeAttr("data-view");
                 node.removeAttr("data-view-args");
                 //nest inside parent Layout?
-                var parentLayout = node.parents("*[data-role='" + name + "view']:first").data(name + "View");
+                var parentLayout = node.parents("*[data-role^='mokuso']:first").data("mokusoLayout");
                 if (parentLayout instanceof kendo.Layout) {
-                    parentLayout.showIn(node, kendoView, self.options.transition);
+                    parentLayout.showIn("#mokusoLayoutNode", kendoView, self.options.transition);
                 }
                 else {
                     kendoView.render(node);
@@ -329,7 +339,7 @@
                     var __role = $.trim(__node.attr("data-role") || "").toLowerCase();
                     if (__role.length) {
                         //add model binding
-                        __node.attr("data-model", name + ".GlobalMobileModels." + uid);
+                        __node.attr("data-model", "mokuso.GlobalMobileModels." + uid);
                         //add init event bindings...
                         if (__role == "view") {
                             var bindAttr = (__node.attr("data-bind") || "").replace(new RegExp("events([ ]{0,}):([ ]{0,}){", "i"), "events:{");
@@ -500,6 +510,23 @@
         _renderer: null,
         _resolver: null,
 
+        /**
+         * Initializes the framework
+         * @constructor
+         * @param {HTMLElement} contentNode - The node containing the content portion of your app.
+         * @param {json} options
+             * @param {String} options.initial
+             * @param {Function} options.init
+             * @param {String} options.transition
+             * @param {String} options.root
+             * @param {boolean} options.pushState
+             * @param {boolean} options.hashBang
+             * @param {Array} options.modules
+             * @param {Array} options.paths
+         * @param {mokuso.Renderer} options.renderer
+         * @param {mokuso.Resolver} options.resolver
+         * @param {boolean} isMobile - this will initialize a kendo.mobile.Application if set to true
+         */
         init: function (contentNode, options, isMobile) {
             //constructor - where the magic happens...
             var self = this;
@@ -543,7 +570,7 @@
                     if ($.type(self.options.initial) == "string" && $.trim(self.options.initial).length > 0) {
                         self.load(self.options.node, options.initial, {}, _.createRenderer("kendomobile", self.options, self._resolver)).then(function () {
                             //need to move all nodes from view out into the body for mobile stuff to work proper
-                            self.options.node.prepend($("*[data-role='" + name + "view']:first").data(name + "View").element.children());
+                            self.options.node.prepend($("*[data-role='mokusoview']:first").data("mokusoView").element.children());
                             //create kendo.mobile.Application off the newly minted inital view
                             self.mobileApp = new kendo.mobile.Application(self.options.node, $.extend($.extend({}, self.options), {
                                 //override these options for the Application without overwriting self.options
@@ -593,14 +620,13 @@
                         });
                     });
                     //set content node to layout
-                    var layout = new kendo.Layout("<div></div>", { wrap: true });
+                    var layout = new kendo.Layout("<div id='mokusoLayoutNode'></div>", { wrap: false });
                     //render layout & reset options.node
                     layout.render(contentNode);
-                    self.options.node = contentNode.children().children();
+                    self.options.node = contentNode.find("#mokusoLayoutNode");
                     //fake view so the renderer picks it up
-                    var _node = contentNode.children();
-                    _node.attr("data-role", name + "view");
-                    _node.data(name + "View", layout);
+                    contentNode.attr("data-role", "mokusolayout");
+                    contentNode.data("mokusoLayout", layout);
                     //run default route?
                     var hIdx = location.href.indexOf("#");
                     if ($.trim(self.options.initial).length && (hIdx < 0 || hIdx == (location.href.length - 1))) {
@@ -625,22 +651,35 @@
                 });
             });
         },
+        /**
+         * Registers a module with mokuso
+         * @param {mokuso.Module} module
+         */
         registerModule: function (_module) {
             if (_module instanceof Class.Module && $.grep(this.modules, function (__module) { return _module === __module; }).length == 0) {
                 this.modules.push(_module);
             }
             else {
-                console.error("Module is not an extension of " + name + ".Module");
+                console.error("Module is not an extension of mokuso.Module");
             }
         },
+        /**
+         * Deregisters a module with mokuso
+         * @param {mokuso.Module} module
+         */
         deregisterModule: function (_module) {
             if (_module instanceof Class.Module && $.grep(this.modules, function (__module) { return _module === __module; }).length >= 1) {
                 this.modules = $.grep(function (__module) { return _module !== __module; });
             }
             else {
-                console.error("Module is not an extension of " + name + ".Module");
+                console.error("Module is not an extension of mokuso.Module");
             }
         },
+        /**
+         * replaces the content in the initialized contentNode with the page provided
+         * @param {String} page - view/viewmodel path minus the extension
+         * @param {boolean} silent - if set to true only the router will be updated, no content replaced
+         */
         navigate: function (page, silent) {
             if (!this.router) {
                 console.error("App not initialized: call initialize(DomNode contentNode, JSON options)");
@@ -657,6 +696,10 @@
                 console.error("Arguments Exception", "Page is empty; Usage: navigate(String page)");
             }
         },
+        /**
+         * silently replaces curent page with the passed in page in browser history
+         * @param {String} page - view/viewmodel path minus the extension
+         */
         replace: function (page) {
             if (!this.router) {
                 console.error("App not initialized: call initialize(DomNode contentNode, JSON options)");
@@ -672,6 +715,12 @@
                 console.error("Arguments Exception", "Page is empty; Usage: replace(String page)");
             }
         },
+        /**
+         * replaces the content in the initialized contentNode with the page provided
+         * @param {HTMLElement} node - the desired node to have the page stuffed into
+         * @param {String} page - view/viewmodel path minus the extension
+         * @param {json} args - the args to pass into the constructor of the viewmodel (init)
+         */
         load: function (node, page, args, renderer) {
             var self = this;
             //get renderer
@@ -683,7 +732,9 @@
             if ($.type(page) == "string" && $.trim(page).length > 0 && $.type(node) == "object") {
                 return _.handleModuleHook(this.modules, "beforeLoad", [node, page, args]).then(function () {
                     self.trigger("before-load", [node, page, args]);
-                    return $.when(__renderer.render.apply(__renderer, [node, page, args]));
+                    return $.when(__renderer.render.apply(__renderer, [node, page, args])).fail(function () {
+                        console.error("mokuso error loading", arguments);
+                    });
                 }).then(function () {
                     return _.handleModuleHook(self.modules, "afterLoad", [node, page, args]).then(function () {
                         self.trigger("after-load", [node, page, args]);
@@ -694,6 +745,9 @@
                 console.error("Arguments Exception", "Page is empty or node is not a DOM element; Usage: load(String page, DomNode node)");
             }
         },
+        /**
+         * shows a loading animation in the initialized contentNode
+         */
         showLoading: function () {
             if (this.mobileApp) {
                 this.mobileApp.showLoading();
@@ -702,12 +756,20 @@
                 kendo.ui.progress(this.options.node, true);
             }
         },
+        /**
+         * hides the loading animation in the initialized contentNode
+         */
         hideLoading: function () {
             kendo.ui.progress(this.options.node, false);
             if (this.mobileApp) {
                 this.mobileApp.hideLoading();
             }
         },
+        /**
+         * binds a method to an event in the mokuso framework
+         * @param {String} event - the desired event to bind to
+         * @param {Function} method - the method to be called when the event is triggered
+         */
         bind: function (event, method) {
             if ($.type(event) == "string" && $.trim(event).length > 0 && $.isFunction(method)) {
                 if (this.mobileApp) {
@@ -721,6 +783,10 @@
                 console.error("Arguments Exception", "Event is empty or method is not a function; Usage: bind(String event, Function method, ...)");
             }
         },
+        /**
+         * triggers an event in the mokuso framework
+         * @param {String} event - the desired event to trigger
+         */
         trigger: function (event) {
             if ($.type(event) == "string" && $.trim(event).length > 0) {
                 if (this.mobileApp) {
@@ -760,6 +826,15 @@
     Class.GlobalMobileModels = {};
 
     //set global var
+    window.mokuso = Class;
 
-    window[name] = Class;
+    //handle module loaders
+    if (typeof define == 'function' && define.amd) {
+        define(function () {
+            return Class;
+        });
+    }
+    else if (typeof module != 'undefined' && module.exports) {
+        module.exports = Class;
+    }
 })();
