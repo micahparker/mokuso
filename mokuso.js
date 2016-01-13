@@ -39,15 +39,13 @@
                     var arrBindFields = [];
                     var __args = {};
                     if (_parentModel) {
-                        with (_parentModel) {
-                            try {
-                                //is there any other way to do this?? not very performant at scale...
-                                eval("__args = " + _n.attr("data-view-args"));
-                            }
-                            catch (ex) {
-                                //eval didnt work most likely
-                                console.error("Argument Parsing Error", "Could not parse inline page arguments: " + _n.attr("data-view-args"));
-                            }
+                        try {
+                            //is there any other way to do this?? not very performant at scale...
+                            eval("__args = " + _n.attr("data-view-args").replace(new RegExp(":\\s?([a-zA-Z_]{1,})", "gi"), ": _parentModel.$1"));
+                        }
+                        catch (ex) {
+                            //eval didnt work most likely
+                            console.error("Argument Parsing Error", "Could not parse inline page arguments: " + _n.attr("data-view-args"));
                         }
                     }
                     //get string representation of properties from and to for binding from and to ObservableObjects
@@ -90,7 +88,7 @@
             var type = $.type(renderer);
 
             if (type == "function") {
-                var renderer = new renderer(options, resolver);
+                renderer = new renderer(options, resolver);
                 if (renderer instanceof _renderer) {
                     return renderer;
                 }
@@ -99,13 +97,10 @@
                 switch (renderer.toLowerCase()) {
                     case 'kendomobile':
                         return new _renderer_KendoMobile(options, resolver);
-                        break;
                     case 'react':
                         return new _renderer_React(options, resolver);
-                        break;
                     case 'knockout':
                         return new _renderer_Knockout(options, resolver);
-                        break;
                 }
             }
 
@@ -115,7 +110,7 @@
             var type = $.type(resolver);
 
             if (type == "function") {
-                var resolver = new resolver(options);
+                resolver = new resolver(options);
                 if (resolver instanceof _resolver) {
                     return resolver;
                 }
@@ -124,7 +119,6 @@
                 switch (resolver.toLowerCase()) {
                     case 'browserify':
                         return new _renderer_Browserify(options);
-                        break;
                 }
             }
 
@@ -220,7 +214,9 @@
                 }, ___def);
                 //after they are all destroyed then resolve the main deferred
                 __def.then(function () {
-                    node.data("mokusoView").destroy();
+                    if (node.data("mokusoView")) {
+                        node.data("mokusoView").destroy();
+                    }
                     node.empty();
                     //resolve main!
                     def.resolve();
@@ -232,7 +228,7 @@
                 ___def.resolve();
             }
 
-            if (def == null) {
+            if (def === null) {
                 def = $.Deferred().resolve();
             }
 
@@ -323,17 +319,15 @@
     });
 
     var _renderer_KendoMobile = _renderer_Kendo.extend({
-        _firstGo: true,
-
         _wireTogether: function (node, page, args, view, modelview, _def) {
             var self = this;
-
-            if (this._firstGo == false) {
+            //check to see if its a mobile view (parent is app content node)
+            if (node.parent().is("[data-mokuso-content-node]")) {
                 //no view creation, just setup for kendo.mobile.Application
                 var _node = $(view);
                 var uid = "a" + kendo.guid().replace(new RegExp("-", "g"), "");
                 //set global model
-                Class.GlobalMobileModels[uid] = modelview
+                Class.GlobalMobileModels[uid] = modelview;
                 _node.each(function (n) {
                     var __node = $(this);
                     var __role = $.trim(__node.attr("data-role") || "").toLowerCase();
@@ -359,6 +353,7 @@
                     var _element = _node.insertAfter(node);
                     //await nested pages then resolve go deferred (dont nest them as mobile...)
                     return _.findNestedViews(_element, modelview, self).then(function () {
+                        //resolve this views deferred
                         _def.resolve();
                     }).fail(function () {
                         //fail go deferred
@@ -367,7 +362,6 @@
                 });
             }
             else {
-                this._firstGo = false;
                 return _renderer_Kendo.fn._wireTogether.apply(self, arguments);
             }
         }
@@ -425,7 +419,7 @@
 
     //dependancy resolver
 
-    _resolver = kendo.Class.extend({
+    var _resolver = kendo.Class.extend({
         options: null,
 
         init: function (_options) {
@@ -438,7 +432,7 @@
         }
     });
 
-    _resolver_JQuery = _resolver.extend({
+    var _resolver_JQuery = _resolver.extend({
         resolve: function (page) {
             var def = null;
 
@@ -459,7 +453,8 @@
         }
     });
 
-    _resolver_RequireJS = _resolver.extend({
+    var _resolver_RequireJS = _resolver.extend({
+        cache: {},
         resolve: function (page) {
             var def = null;
             if (page.match("js$")) {
@@ -470,17 +465,24 @@
                     def.rejectWith(null, arguments);
                 });
             }
-            else {
+            else if (!this.cache[page]) {
+                var self = this;
                 def = $.ajax({
-                    url: require.toUrl(page)
+                    url: require.toUrl(page),
+                    success: function (html) {
+                        self.cache[page] = html;
+                    }
                 }).promise();
+            }
+            else {
+                def = $.Deferred().resolveWith(null, [this.cache[page]]);
             }
 
             return def;
         }
     });
 
-    _resolver_Browserify = _resolver.extend({
+    var _resolver_Browserify = _resolver.extend({
         resolve: function (page) {
             var def = null;
 
@@ -563,14 +565,21 @@
             self._renderer = _.createRenderer(self.options.renderer, self.options, self._resolver);
             //run beforeInit module hooks before we kick anything off...
             _.handleModuleHook(this.modules, "beforeInit", [this]).then(function () {
+                //set attribute to content node
+                self.options.node.attr("data-mokuso-content-node", true);
                 //create router
                 if (isMobile && kendo.mobile && kendo.mobile.Application) {
                     var def = $.Deferred();
+                    var _mobile_renderer = _.createRenderer("kendomobile", self.options, self._resolver);
+                    //set transition
+                    if (!self.options.transition || self.options.transition.toLowerCase() === "swap") {
+                        self.options.transition = "slide";
+                    }
                     //the initial view needs to get loaded before the mobileApp is created, it should contain all the mobile views
                     if ($.type(self.options.initial) == "string" && $.trim(self.options.initial).length > 0) {
-                        self.load(self.options.node, options.initial, {}, _.createRenderer("kendomobile", self.options, self._resolver)).then(function () {
+                        self.load(self.options.node, options.initial, {}, _mobile_renderer).then(function () {
                             //need to move all nodes from view out into the body for mobile stuff to work proper
-                            self.options.node.prepend($("*[data-role='mokusoview']:first").data("mokusoView").element.children());
+                            self.options.node.prepend(self.options.node.find(">*[data-role='mokusoview']").data("mokusoView").element.children());
                             //create kendo.mobile.Application off the newly minted inital view
                             self.mobileApp = new kendo.mobile.Application(self.options.node, $.extend($.extend({}, self.options), {
                                 //override these options for the Application without overwriting self.options
@@ -580,23 +589,44 @@
                         });
                     }
                     else {
-                        //assume the content for the mobile app is already in the desired node
-                        self.mobileApp = new kendo.mobile.Application(self.options.node, $.extend($.extend({}, self.options), {
-                            //override these options for the Application without overwriting self.options
-                            init: function () { setTimeout(function () { def.resolve(); }, 10); }
-                        }));
+                        //load any views
+                        _.findNestedViews(self.options.node, null, _mobile_renderer).then(function () {
+                            //assume the content for the mobile app is already in the desired node
+                            self.mobileApp = new kendo.mobile.Application(self.options.node, $.extend($.extend({}, self.options), {
+                                //override these options for the Application without overwriting self.options
+                                init: function () { setTimeout(function () { def.resolve(); }, 10); }
+                            }));
+                        });
                     }
                     return $.when(def).then(function () {
                         //use the router from the mobile app, no need for 2!
                         self.router = self.mobileApp.router;
+                        //overload kendo.ui.progress
+                        kendo.ui.progress = function (node, onOff) {
+                            var pane = kendo.widgetInstance(node.closest(".km-pane").addBack(".km-pane"));
+                            if (pane && pane.loader) {
+                                onOff ? pane.loader.show() : pane.loader.hide();
+                                if (!onOff) {
+                                    pane.element.find(".k-loading-mask").remove();
+                                }
+                            }
+                            else {
+                                onOff ? self.mobileApp.showLoading() : self.mobileApp.hideLoading();
+                                if (!onOff) {
+                                    self.options.node.find(".k-loading-mask").remove();
+                                }
+                            }
+                        }
                         //bind to router to we can trigger events here (best we can do for a kendoMobileApp router?)
                         self.router.bind("change", function (e) {
                             //trigger before route
                             self.trigger("before-navigate", [e.url, self.options.node]);
+                            _.handleModuleHook(self.modules, "beforeNavigate", [self.options.node, e.url]);
                             //trigger after route right after cause mobile stuff happens right away, no loading...
                             setTimeout(function () {
                                 self.trigger("after-navigate", [e.url, self.options.node]);
-                            }, 10)
+                                _.handleModuleHook(self.modules, "afterNavigate", [self.options.node, e.url]);
+                            }, 10);
                         });
                     });
                 }
@@ -656,7 +686,7 @@
          * @param {mokuso.Module} module
          */
         registerModule: function (_module) {
-            if (_module instanceof Class.Module && $.grep(this.modules, function (__module) { return _module === __module; }).length == 0) {
+            if (_module instanceof Class.Module && $.grep(this.modules, function (__module) { return _module === __module; }).length === 0) {
                 this.modules.push(_module);
             }
             else {
@@ -773,7 +803,7 @@
         bind: function (event, method) {
             if ($.type(event) == "string" && $.trim(event).length > 0 && $.isFunction(method)) {
                 if (this.mobileApp) {
-                    this.mobileApp.bind.apply(this.mobileApp, arguments)
+                    this.mobileApp.bind.apply(this.mobileApp, arguments);
                 }
                 else {
                     this._events.bind.apply(this._events, arguments);
@@ -790,7 +820,7 @@
         trigger: function (event) {
             if ($.type(event) == "string" && $.trim(event).length > 0) {
                 if (this.mobileApp) {
-                    this.mobileApp.trigger.apply(this.mobileApp, arguments)
+                    this.mobileApp.trigger.apply(this.mobileApp, arguments);
                 }
                 else {
                     this._events.trigger.apply(this._events, arguments);
