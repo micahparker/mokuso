@@ -18,8 +18,8 @@ Libraries needed (CDN's already referenced in sample project):
 * **Deep linking**: Navigate using links, buttons, native browser buttons or whatever else and watch the smooth page animations without a page reload. 
 * **Excellent JavaScript code organization**: Group page specific content with a consistent naming convention for easy project management. 
 * **Easy (I mean EASY) to use**: Click around on the sample project and you will see what I mean.
-* **Render Liberation**: Dont like MVVM? Mokuso comes with out-of-box support for React as well. Have you own opinions about renderers (who doesnt)? provide your own by sublcassing the simple mokuso.Renderer class.
-* **Require.what?**: Prefer browserify or some other method of resolving modules? Just like for rendering engines just subclass the mokuso.Resolver class and pass it in.
+* **Render Liberation**: Dont like MVVM? Mokuso comes with out-of-box support for React as well. Have you own opinions about renderers (who doesnt)? provide your own by extend the simple mokuso.Renderer class.
+* **Require.what?**: Prefer browserify or some other method of resolving modules? Just like for rendering engines, extend the mokuso.Resolver class and pass it in the constructor options.
 
 ####Why Kendo?
 
